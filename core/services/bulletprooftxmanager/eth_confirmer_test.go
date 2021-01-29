@@ -42,6 +42,16 @@ func newBroadcastEthTxAttempt(t *testing.T, etxID int64, store *store.Store, gas
 	return attempt
 }
 
+func newInProgressEthTxAttempt(t *testing.T, etxID int64, store *store.Store, gasPrice ...int64) models.EthTxAttempt {
+	attempt := cltest.NewEthTxAttempt(t, etxID)
+	attempt.State = models.EthTxAttemptInProgress
+	if len(gasPrice) > 0 {
+		gp := gasPrice[0]
+		attempt.GasPrice = *utils.NewBig(big.NewInt(gp))
+	}
+	return attempt
+}
+
 func mustInsertInProgressEthTx(t *testing.T, store *store.Store, nonce int64, fromAddress gethCommon.Address) models.EthTx {
 	etx := cltest.NewEthTx(t, store, fromAddress)
 	etx.State = models.EthTxInProgress
@@ -356,6 +366,42 @@ func TestEthConfirmer_CheckForReceipts(t *testing.T) {
 
 		ethClient.AssertExpectations(t)
 	})
+
+	etx4 := cltest.MustInsertUnconfirmedEthTxWithBroadcastAttempt(t, store, nonce, fromAddress)
+	nonce++
+
+	t.Run("on receipt fetch marks in_progress eth_tx_attempt as broadcast", func(t *testing.T) {
+		attempt4_2 := newInProgressEthTxAttempt(t, etx4.ID, store)
+		attempt4_2.GasPrice = *utils.NewBig(big.NewInt(10))
+
+		require.NoError(t, store.DB.Create(&attempt4_2).Error)
+
+		gethReceipt := gethTypes.Receipt{
+			TxHash:           attempt4_2.Hash,
+			BlockHash:        cltest.NewHash(),
+			BlockNumber:      big.NewInt(42),
+			TransactionIndex: uint(1),
+		}
+		// Second attempt is confirmed
+		ethClient.On("TransactionReceipt", mock.Anything, mock.MatchedBy(func(txHash gethCommon.Hash) bool {
+			return txHash == attempt4_2.Hash
+		})).Return(&gethReceipt, nil).Once()
+
+		// Do the thing
+		require.NoError(t, ec.CheckForReceipts(ctx, blockNum))
+
+		ethClient.AssertExpectations(t)
+
+		// Check that the state was updated
+		etx4, err = store.FindEthTxWithAttempts(etx4.ID)
+		require.NoError(t, err)
+
+		attempt4_2 = etx4.EthTxAttempts[1]
+
+		// And the attempts
+		require.Equal(t, models.EthTxAttemptBroadcast, attempt4_2.State)
+		require.Equal(t, int64(42), *attempt4_2.BroadcastBeforeBlockNum)
+	})
 }
 
 func TestEthConfirmer_CheckForReceipts_confirmed_missing_receipt(t *testing.T) {
@@ -472,7 +518,7 @@ func TestEthConfirmer_CheckForReceipts_confirmed_missing_receipt(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, models.EthTxConfirmed, etx0.State)
 
-		ethReceipt = etx0.EthTxAttempts[0].EthReceipts[0]
+		ethReceipt = etx0.EthTxAttempts[1].EthReceipts[0]
 		require.Equal(t, gethReceipt0.BlockHash, ethReceipt.BlockHash)
 	})
 
