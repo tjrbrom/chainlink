@@ -174,33 +174,33 @@ func (ec *ethConfirmer) fetchReceipts(ctx context.Context, chEthTxes <-chan mode
 			return
 		}
 		for _, attempt := range etx.EthTxAttempts {
-			logFields := []interface{}{
+			l := logger.Default.With(
 				"txHash", attempt.Hash.Hex(), "ethTxAttemptID", attempt.ID, "ethTxID", etx.ID, "nonce", etx.Nonce,
-			}
+			)
 			// NOTE: This could conceivably be optimised even further at the
 			// expense of slightly higher load for the remote eth node, by
 			// batch requesting all receipts at once
 			receipt, err := ec.fetchReceipt(ctx, attempt.Hash)
 			if eth.IsParityQueriedReceiptTooEarly(err) || (receipt != nil && receipt.BlockNumber == nil) {
-				logger.Debugw("EthConfirmer#fetchReceipts: got receipt for transaction but it's still in the mempool and not included in a block yet", logFields...)
+				l.Debugw("EthConfirmer#fetchReceipts: got receipt for transaction but it's still in the mempool and not included in a block yet")
 				break
 			} else if err != nil {
-				logger.Errorw("EthConfirmer#fetchReceipts: fetchReceipt failed", append(logFields, "err", err)...)
+				l.Errorw("EthConfirmer#fetchReceipts: fetchReceipt failed", "err", err)
 				break
 			}
 			if receipt != nil {
-				logger.Debugw("EthConfirmer#fetchReceipts: got receipt for transaction", append(logFields, "blockNumber", receipt.BlockNumber)...)
+				l.Debugw("EthConfirmer#fetchReceipts: got receipt for transaction", "blockNumber", receipt.BlockNumber)
 				if receipt.TxHash != attempt.Hash {
-					logger.Errorf("EthConfirmer#fetchReceipts: invariant violation, expected receipt with hash %s to have same hash as attempt with hash %s", receipt.TxHash.Hex(), attempt.Hash.Hex())
+					l.Errorf("EthConfirmer#fetchReceipts: invariant violation, expected receipt with hash %s to have same hash as attempt with hash %s", receipt.TxHash.Hex(), attempt.Hash.Hex())
 					break
 				}
 				if err := ec.saveReceipt(*receipt, etx.ID); err != nil {
-					logger.Errorw("EthConfirmer#fetchReceipts: saveReceipt failed", append(logFields, "err", err)...)
+					l.Errorw("EthConfirmer#fetchReceipts: saveReceipt failed", "err", err)
 					break
 				}
 				break
 			} else {
-				logger.Debugw("EthConfirmer#fetchReceipts: still waiting for receipt", logFields...)
+				l.Debugw("EthConfirmer#fetchReceipts: still waiting for receipt")
 			}
 		}
 	}

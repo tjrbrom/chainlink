@@ -133,6 +133,7 @@ func TestEthConfirmer_CheckForReceipts(t *testing.T) {
 	ec := bulletprooftxmanager.NewEthConfirmer(store, config)
 
 	nonce := int64(0)
+	var err error
 	ctx := context.Background()
 	blockNum := int64(0)
 
