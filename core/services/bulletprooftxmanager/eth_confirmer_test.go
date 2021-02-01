@@ -133,7 +133,6 @@ func TestEthConfirmer_CheckForReceipts(t *testing.T) {
 	ec := bulletprooftxmanager.NewEthConfirmer(store, config)
 
 	nonce := int64(0)
-	var err error
 	ctx := context.Background()
 	blockNum := int64(0)
 
@@ -166,6 +165,7 @@ func TestEthConfirmer_CheckForReceipts(t *testing.T) {
 		// Do the thing
 		require.NoError(t, ec.CheckForReceipts(ctx, blockNum))
 
+		var err error
 		etx1, err = store.FindEthTxWithAttempts(etx1.ID)
 		require.Len(t, etx1.EthTxAttempts, 1)
 		attempt1_1 = etx1.EthTxAttempts[0]
@@ -393,6 +393,7 @@ func TestEthConfirmer_CheckForReceipts(t *testing.T) {
 		ethClient.AssertExpectations(t)
 
 		// Check that the state was updated
+		var err error
 		etx4, err = store.FindEthTxWithAttempts(etx4.ID)
 		require.NoError(t, err)
 
